@@ -324,6 +324,34 @@ private void SomeMethod()
 ````
 
 ## Release notes
+* Version 4.2.8 - 08 Oct 2021
+    * Fixed deadlock in socket receive
+    * Fixed issue in reconnection handling when the client is disconnected again during resubscribing
+    * Added some additional checking of socket state to prevent sending/expecting data when socket is not connected
+
+* Version 4.2.7 - 06 Oct 2021
+    * Made receivedMessages protected again to allow implementations with custom transport (Bittrex) to use it again
+
+* Version 4.2.6 - 06 Oct 2021
+    * Fixed an issue causing socket client to stop processing data in .NET Framework
+
+* Version 4.2.5 - 05 Oct 2021
+    * Added custom async wait event implementation as previous method seems to not work 100% of the time
+
+* Version 4.2.4 - 30 Sep 2021
+    * Fix for InvalidOperationExceptions when running socket connections from .Net framework
+
+* Version 4.2.3 - 29 Sep 2021
+    * Added IncomingKbps property to socket/socket client
+    * Updated logging
+    * Socket performance improvements
+
+* Version 4.2.2 - 23 Sep 2021
+    * Restored missing request parameters log
+
+* Version 4.2.1 - 22 Sep 2021
+    * Fìx for websocket not automatically reconnecting when connection is closed unexpectedly
+
 * Version 4.2.0 - 20 Sep 2021
     * Prevent reconnect spamming when invalid checksum is calculated in SymbolOrderBook
     * Added default nonce provider implementation

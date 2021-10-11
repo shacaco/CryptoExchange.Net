@@ -234,6 +234,9 @@ namespace CryptoExchange.Net.OrderBook
         /// <returns></returns>
         public async Task<CallResult<bool>> StartAsync()
         {
+            if (Status != OrderBookStatus.Disconnected)
+                throw new InvalidOperationException($"Can't start book unless state is {OrderBookStatus.Connecting}. Was {Status}");
+
             log.Write(LogLevel.Debug, $"{Id} order book {Symbol} starting");
             Status = OrderBookStatus.Connecting;
             _processTask = Task.Factory.StartNew(ProcessQueue, TaskCreationOptions.LongRunning);
@@ -447,7 +450,8 @@ namespace CryptoExchange.Net.OrderBook
 
                     if (asks.First().Key < bids.First().Key)
                     {
-                        log.Write(LogLevel.Warning, $"{Id} order book {Symbol} detected out of sync order book. Resyncing");
+                        log.Write(LogLevel.Warning, $"{Id} order book {Symbol} detected out of sync order book. First ask: {asks.First().Key}, first bid: {bids.First().Key}. Resyncing");
+                        _stopProcessing = true;
                         Resubscribe();
                         return;
                     }                    
@@ -636,6 +640,7 @@ namespace CryptoExchange.Net.OrderBook
             {
                 // Out of sync
                 log.Write(LogLevel.Warning, $"{Id} order book {Symbol} out of sync (expected { LastSequenceNumber + 1}, was {sequence}), reconnecting");
+                _stopProcessing = true;
                 Resubscribe();
                 return false;
             }

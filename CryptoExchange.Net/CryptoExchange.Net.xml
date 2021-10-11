@@ -142,20 +142,6 @@
             <param name="buff"></param>
             <returns></returns>
         </member>
-        <member name="T:CryptoExchange.Net.Authentication.DefaultNonceProvider">
-            <summary>
-            Default nonce provider
-            </summary>
-        </member>
-        <member name="M:CryptoExchange.Net.Authentication.DefaultNonceProvider.#ctor(System.Nullable{System.Int64})">
-            <summary>
-            Create a new default nonce provider
-            </summary>
-            <param name="startNonce">Start with an incremental value from this start nonce. If not provided `DataTime.UtcNow.Ticks` will be used</param>
-        </member>
-        <member name="M:CryptoExchange.Net.Authentication.DefaultNonceProvider.GetNonce">
-            <inheritdoc />
-        </member>
         <member name="T:CryptoExchange.Net.Authentication.PrivateKey">
             <summary>
             Private key info
@@ -518,7 +504,7 @@
         </member>
         <member name="M:CryptoExchange.Net.ExchangeHelpers.RoundToSignificantDigits(System.Decimal,System.Int32,CryptoExchange.Net.Objects.RoundingType)">
             <summary>
-            Round a value to have the provided total number of digits. For example, value 253.12332 with 5 digits would be 253.12 
+            Round a value to have the provided total number of digits. For example, value 253.12332 with 5 digits would be 253.12
             </summary>
             <param name="value">The value to round</param>
             <param name="digits">The total amount of digits (NOT decimal places) to round to</param>
@@ -527,7 +513,7 @@
         </member>
         <member name="M:CryptoExchange.Net.ExchangeHelpers.RoundDown(System.Decimal,System.Double)">
             <summary>
-            Rounds a value down to 
+            Rounds a value down to
             </summary>
             <param name="i"></param>
             <param name="decimalPlaces"></param>
@@ -1035,23 +1021,6 @@
             <param name="source"></param>
             <returns></returns>
         </member>
-        <member name="M:CryptoExchange.Net.ExtensionMethods.WaitOneAsync(System.Threading.WaitHandle,System.Int32,System.Threading.CancellationToken)">
-            <summary>
-            Wait one async
-            </summary>
-            <param name="handle"></param>
-            <param name="millisecondsTimeout"></param>
-            <param name="cancellationToken"></param>
-            <returns></returns>
-        </member>
-        <member name="M:CryptoExchange.Net.ExtensionMethods.WaitOneAsync(System.Threading.WaitHandle,System.TimeSpan)">
-            <summary>
-            Wait one async
-            </summary>
-            <param name="handle"></param>
-            <param name="timeout"></param>
-            <returns></returns>
-        </member>
         <member name="M:CryptoExchange.Net.ExtensionMethods.ToJToken(System.String,CryptoExchange.Net.Logging.Log)">
             <summary>
             String to JToken
@@ -1220,7 +1189,7 @@
             Configure the requests created by this factory
             </summary>
             <param name="requestTimeout">Request timeout to use</param>
-            <param name="proxy">Proxy settings to use</param>       
+            <param name="proxy">Proxy settings to use</param>
             <param name="httpClient">Optional shared http client instance</param>
         </member>
         <member name="T:CryptoExchange.Net.Interfaces.IResponse">
@@ -1360,6 +1329,11 @@
         <member name="P:CryptoExchange.Net.Interfaces.ISocketClient.MaxConcurrentResubscriptionsPerSocket">
             <inheritdoc cref="P:CryptoExchange.Net.Objects.SocketClientOptions.MaxConcurrentResubscriptionsPerSocket"/>
         </member>
+        <member name="P:CryptoExchange.Net.Interfaces.ISocketClient.IncomingKbps">
+            <summary>
+            The current kilobytes per second of data being received by all connection from this client, averaged over the last 3 seconds
+            </summary>
+        </member>
         <member name="M:CryptoExchange.Net.Interfaces.ISocketClient.UnsubscribeAsync(CryptoExchange.Net.Sockets.UpdateSubscription)">
             <summary>
             Unsubscribe from a stream
@@ -1401,7 +1375,7 @@
         <member name="E:CryptoExchange.Net.Interfaces.ISymbolOrderBook.OnOrderBookUpdate">
             <summary>
             Event when order book was updated. Be careful! It can generate a lot of events at high-liquidity markets
-            </summary>    
+            </summary>
         </member>
         <member name="E:CryptoExchange.Net.Interfaces.ISymbolOrderBook.OnBestOffersChanged">
             <summary>
@@ -1553,6 +1527,11 @@
         <member name="P:CryptoExchange.Net.Interfaces.IWebsocket.RatelimitPerSecond">
             <summary>
             The max amount of outgoing messages per second
+            </summary>
+        </member>
+        <member name="P:CryptoExchange.Net.Interfaces.IWebsocket.IncomingKbps">
+            <summary>
+            The current kilobytes per second of data being received, averaged over the last 3 seconds
             </summary>
         </member>
         <member name="P:CryptoExchange.Net.Interfaces.IWebsocket.DataInterpreterBytes">
@@ -1759,6 +1738,35 @@
             <param name="login">The proxy login</param>
             <param name="password">The proxy password</param>
         </member>
+        <member name="T:CryptoExchange.Net.Objects.AsyncResetEvent">
+            <summary>
+            Async auto reset based on Stephen Toub`s implementation
+            https://devblogs.microsoft.com/pfxteam/building-async-coordination-primitives-part-2-asyncautoresetevent/
+            </summary>
+        </member>
+        <member name="M:CryptoExchange.Net.Objects.AsyncResetEvent.#ctor(System.Boolean,System.Boolean)">
+            <summary>
+            New AsyncResetEvent
+            </summary>
+            <param name="initialState"></param>
+            <param name="reset"></param>
+        </member>
+        <member name="M:CryptoExchange.Net.Objects.AsyncResetEvent.WaitAsync(System.Nullable{System.TimeSpan})">
+            <summary>
+            Wait for the AutoResetEvent to be set
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:CryptoExchange.Net.Objects.AsyncResetEvent.Set">
+            <summary>
+            Signal a waiter
+            </summary>
+        </member>
+        <member name="M:CryptoExchange.Net.Objects.AsyncResetEvent.Dispose">
+            <summary>
+            Dispose
+            </summary>
+        </member>
         <member name="T:CryptoExchange.Net.Objects.ByteOrderComparer">
             <summary>
             Comparer for byte order
@@ -1848,6 +1856,14 @@
             Create an error result
             </summary>
             <param name="error"></param>
+            <returns></returns>
+        </member>
+        <member name="M:CryptoExchange.Net.Objects.CallResult`1.As``1(``0)">
+            <summary>
+            Copy the WebCallResult to a new data type
+            </summary>
+            <typeparam name="K">The new type</typeparam>
+            <param name="data">The data of the new type</param>
             <returns></returns>
         </member>
         <member name="T:CryptoExchange.Net.Objects.WebCallResult">
@@ -2244,7 +2260,7 @@
         </member>
         <member name="P:CryptoExchange.Net.Objects.BaseOptions.LogLevel">
             <summary>
-            The minimum log level to output. Setting it to null will send all messages to the registered ILoggers. 
+            The minimum log level to output. Setting it to null will send all messages to the registered ILoggers.
             </summary>
         </member>
         <member name="P:CryptoExchange.Net.Objects.BaseOptions.LogWriters">
@@ -2311,7 +2327,7 @@
         <member name="P:CryptoExchange.Net.Objects.ClientOptions.ApiCredentials">
             <summary>
             The api credentials
-            </summary>        
+            </summary>
         </member>
         <member name="P:CryptoExchange.Net.Objects.ClientOptions.ShouldCheckObjects">
             <summary>
@@ -2423,7 +2439,7 @@
         <member name="P:CryptoExchange.Net.Objects.SocketClientOptions.SocketSubscriptionsCombineTarget">
             <summary>
             The amount of subscriptions that should be made on a single socket connection. Not all exchanges support multiple subscriptions on a single socket.
-            Setting this to a higher number increases subscription speed because not every subscription needs to connect to the server, but having more subscriptions on a 
+            Setting this to a higher number increases subscription speed because not every subscription needs to connect to the server, but having more subscriptions on a
             single connection will also increase the amount of traffic on that single connection, potentially leading to issues.
             </summary>
         </member>
@@ -2535,7 +2551,7 @@
         </member>
         <member name="E:CryptoExchange.Net.OrderBook.SymbolOrderBook.OnOrderBookUpdate">
             <summary>
-            Event when order book was updated, containing the changed bids and asks. Be careful! It can generate a lot of events at high-liquidity markets 
+            Event when order book was updated, containing the changed bids and asks. Be careful! It can generate a lot of events at high-liquidity markets
             </summary>
         </member>
         <member name="P:CryptoExchange.Net.OrderBook.SymbolOrderBook.LastOrderBookUpdate">
@@ -2815,8 +2831,8 @@
             Create request object for web request
             </summary>
             <param name="request"></param>
-            <param name="client"></param>        
-            <param name="requestId"></param>        
+            <param name="client"></param>
+            <param name="requestId"></param>
         </member>
         <member name="P:CryptoExchange.Net.Requests.Request.Content">
             <inheritdoc />
@@ -2986,7 +3002,7 @@
             <param name="cancellationToken">Cancellation token</param>
             <param name="parameters">The parameters of the request</param>
             <param name="signed">Whether or not the request should be authenticated</param>
-            <param name="checkResult">Whether or not the resulting object should be checked for missing properties in the mapping (only outputs if log verbosity is Debug)</param> 
+            <param name="checkResult">Whether or not the resulting object should be checked for missing properties in the mapping (only outputs if log verbosity is Debug)</param>
             <param name="parameterPosition">Where the parameters should be placed, overwrites the value set in the client</param>
             <param name="arraySerialization">How array parameters should be serialized, overwrites the value set in the client</param>
             <param name="credits">Credits used for the request</param>
@@ -3134,6 +3150,11 @@
         <member name="P:CryptoExchange.Net.SocketClient.RateLimitPerSocketPerSecond">
             <summary>
             The max amount of outgoing messages per socket per second
+            </summary>
+        </member>
+        <member name="P:CryptoExchange.Net.SocketClient.IncomingKbps">
+            <summary>
+            The current kilobytes per second of data being received by all connection from this client, averaged over the last 3 seconds
             </summary>
         </member>
         <member name="M:CryptoExchange.Net.SocketClient.#ctor(System.String,CryptoExchange.Net.Objects.SocketClientOptions,CryptoExchange.Net.Authentication.AuthenticationProvider)">
@@ -3373,6 +3394,16 @@
             A wrapper around the ClientWebSocket
             </summary>
         </member>
+        <member name="F:CryptoExchange.Net.Sockets.CryptoExchangeWebSocketClient._receivedMessages">
+            <summary>
+            Received messages time -> size
+            </summary>
+        </member>
+        <member name="F:CryptoExchange.Net.Sockets.CryptoExchangeWebSocketClient._receivedMessagesLock">
+            <summary>
+            Received messages lock
+            </summary>
+        </member>
         <member name="F:CryptoExchange.Net.Sockets.CryptoExchangeWebSocketClient.log">
             <summary>
             Log
@@ -3459,6 +3490,11 @@
         <member name="P:CryptoExchange.Net.Sockets.CryptoExchangeWebSocketClient.Timeout">
             <summary>
             The timespan no data is received on the socket. If no data is received within this time an error is generated
+            </summary>
+        </member>
+        <member name="P:CryptoExchange.Net.Sockets.CryptoExchangeWebSocketClient.IncomingKbps">
+            <summary>
+            The current kilobytes per second of data being received, averaged over the last 3 seconds
             </summary>
         </member>
         <member name="E:CryptoExchange.Net.Sockets.CryptoExchangeWebSocketClient.OnClose">
@@ -3591,6 +3627,33 @@
             </summary>
             <returns></returns>
         </member>
+        <member name="M:CryptoExchange.Net.Sockets.CryptoExchangeWebSocketClient.UpdateReceivedMessages">
+            <summary>
+            Update the received messages list, removing messages received longer than 3s ago
+            </summary>
+        </member>
+        <member name="T:CryptoExchange.Net.Sockets.ReceiveItem">
+            <summary>
+            Received message info
+            </summary>
+        </member>
+        <member name="P:CryptoExchange.Net.Sockets.ReceiveItem.Timestamp">
+            <summary>
+            Timestamp of the received data
+            </summary>
+        </member>
+        <member name="P:CryptoExchange.Net.Sockets.ReceiveItem.Bytes">
+            <summary>
+            Number of bytes received
+            </summary>
+        </member>
+        <member name="M:CryptoExchange.Net.Sockets.ReceiveItem.#ctor(System.DateTime,System.Int32)">
+            <summary>
+            ctor
+            </summary>
+            <param name="timestamp"></param>
+            <param name="bytes"></param>
+        </member>
         <member name="T:CryptoExchange.Net.Sockets.DataEvent`1">
             <summary>
             An update received from a socket update subscription
@@ -3661,7 +3724,7 @@
         </member>
         <member name="M:CryptoExchange.Net.Sockets.MessageEvent.#ctor(CryptoExchange.Net.Sockets.SocketConnection,Newtonsoft.Json.Linq.JToken,System.String,System.DateTime)">
             <summary>
-            
+
             </summary>
             <param name="connection"></param>
             <param name="jsonData"></param>
@@ -3802,6 +3865,11 @@
             </summary>
             <param name="data">The data to send</param>
         </member>
+        <member name="M:CryptoExchange.Net.Sockets.SocketConnection.SocketOnOpen">
+            <summary>
+            Handler for a socket opening
+            </summary>
+        </member>
         <member name="M:CryptoExchange.Net.Sockets.SocketConnection.SocketOnClose">
             <summary>
             Handler for a socket closing. Reconnects the socket if needed, or removes it from the active socket list if not
@@ -3904,7 +3972,7 @@
         </member>
         <member name="E:CryptoExchange.Net.Sockets.UpdateSubscription.ConnectionRestored">
             <summary>
-            Event when the connection is restored. Timespan parameter indicates the time the socket has been offline for before reconnecting. 
+            Event when the connection is restored. Timespan parameter indicates the time the socket has been offline for before reconnecting.
             Note that when the executing code is suspended and resumed at a later period (for example laptop going to sleep) the disconnect time will be incorrect as the diconnect
             will only be detected after resuming. This will lead to an incorrect disconnected timespan.
             </summary>

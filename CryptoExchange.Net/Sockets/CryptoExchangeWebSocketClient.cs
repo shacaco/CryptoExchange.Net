@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.WebSockets;
 using System.Security.Authentication;
@@ -28,7 +29,7 @@ namespace CryptoExchange.Net.Sockets
         private Task? _sendTask;
         private Task? _receiveTask;
         private Task? _timeoutTask;
-        private readonly AutoResetEvent _sendEvent;
+        private readonly AsyncResetEvent _sendEvent;
         private readonly ConcurrentQueue<byte[]> _sendBuffer;
         private readonly IDictionary<string, string> cookies;
         private readonly IDictionary<string, string> headers;
@@ -36,7 +37,18 @@ namespace CryptoExchange.Net.Sockets
         private bool _closing;
         private bool _startedSent;
         private bool _startedReceive;
-        private readonly List<DateTime> outgoingMessages;
+
+        private readonly List<DateTime> _outgoingMessages;
+        private DateTime _lastReceivedMessagesUpdate;
+
+        /// <summary>
+        /// Received messages time -> size
+        /// </summary>
+        protected readonly List<ReceiveItem> _receivedMessages;
+        /// <summary>
+        /// Received messages lock
+        /// </summary>
+        protected readonly object _receivedMessagesLock;
 
         /// <summary>
         /// Log
@@ -96,7 +108,7 @@ namespace CryptoExchange.Net.Sockets
         /// <summary>
         /// If the connection is open
         /// </summary>
-        public bool IsOpen => _socket.State == WebSocketState.Open;
+        public bool IsOpen => _socket.State == WebSocketState.Open && !_closing;
 
         /// <summary>
         /// Ssl protocols supported. NOT USED BY THIS IMPLEMENTATION
@@ -125,6 +137,25 @@ namespace CryptoExchange.Net.Sockets
         /// The timespan no data is received on the socket. If no data is received within this time an error is generated
         /// </summary>
         public TimeSpan Timeout { get; set; }
+
+        /// <summary>
+        /// The current kilobytes per second of data being received, averaged over the last 3 seconds
+        /// </summary>
+        public double IncomingKbps
+        {
+            get
+            {
+                lock (_receivedMessagesLock)
+                {
+                    UpdateReceivedMessages();
+
+                    if (!_receivedMessages.Any())
+                        return 0;
+
+                    return Math.Round(_receivedMessages.Sum(v => v.Bytes) / 1000 / 3d);
+                }
+            }
+        }
 
         /// <summary>
         /// Socket closed event
@@ -183,10 +214,12 @@ namespace CryptoExchange.Net.Sockets
             this.cookies = cookies;
             this.headers = headers;
 
-            outgoingMessages = new List<DateTime>();
-            _sendEvent = new AutoResetEvent(false);
+            _outgoingMessages = new List<DateTime>();
+            _receivedMessages = new List<ReceiveItem>();
+            _sendEvent = new AsyncResetEvent();
             _sendBuffer = new ConcurrentQueue<byte[]>();
             _ctsSource = new CancellationTokenSource();
+            _receivedMessagesLock = new object();
 
             _socket = CreateSocket();
         }
@@ -244,7 +277,7 @@ namespace CryptoExchange.Net.Sockets
         public virtual void Send(string data)
         {
             if (_closing)
-                throw new InvalidOperationException("Can't send data when socket is not connected");
+                throw new InvalidOperationException($"Socket {Id} Can't send data when socket is not connected");
 
             var bytes = _encoding.GetBytes(data);
             log.Write(LogLevel.Trace, $"Socket {Id} Adding {bytes.Length} to sent buffer");
@@ -347,51 +380,70 @@ namespace CryptoExchange.Net.Sockets
         private async Task SendLoopAsync()
         {
             _startedSent = true;
-            while (true)
+            try
             {
-                if (_closing)
-                    break;
-
-                _sendEvent.WaitOne();
-
-                if (_closing)                
-                    break;
-
-                while (_sendBuffer.TryDequeue(out var data))
+                while (true)
                 {
-                    if(RatelimitPerSecond != null)
+                    if (_closing)
+                        break;
+
+                    await _sendEvent.WaitAsync().ConfigureAwait(false);
+
+                    if (_closing)
+                        break;
+
+                    while (_sendBuffer.TryDequeue(out var data))
                     {
-                        // Wait for rate limit
-                        DateTime? start = null;
-                        while (MessagesSentLastSecond() >= RatelimitPerSecond)
+                        if (RatelimitPerSecond != null)
                         {
-                            start = DateTime.UtcNow;
-                            await Task.Delay(10).ConfigureAwait(false);
+                            // Wait for rate limit
+                            DateTime? start = null;
+                            while (MessagesSentLastSecond() >= RatelimitPerSecond)
+                            {
+                                if (start == null)
+                                    start = DateTime.UtcNow;
+                                await Task.Delay(10).ConfigureAwait(false);
+                            }
+
+                            if (start != null)
+                                log.Write(LogLevel.Trace, $"Socket {Id} sent delayed {Math.Round((DateTime.UtcNow - start.Value).TotalMilliseconds)}ms because of rate limit");
                         }
 
-                        if (start != null)                        
-                            log.Write(LogLevel.Trace, $"Websocket sent delayed {Math.Round((DateTime.UtcNow - start.Value).TotalMilliseconds)}ms because of rate limit");
-                        
-                        outgoingMessages.Add(DateTime.UtcNow);                        
-                    }
-
-                    try
-                    {
-                        await _socket.SendAsync(new ArraySegment<byte>(data, 0, data.Length), WebSocketMessageType.Text, true, _ctsSource.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // cancelled
-                        break;
-                    }
-                    catch (WebSocketException wse)
-                    {
-                        // Connection closed unexpectedly                        
-                        Handle(errorHandlers, wse);
-                        await CloseInternalAsync(false, true).ConfigureAwait(false);
-                        break;
+                        try
+                        {
+                            await _socket.SendAsync(new ArraySegment<byte>(data, 0, data.Length), WebSocketMessageType.Text, true, _ctsSource.Token).ConfigureAwait(false);
+                            _outgoingMessages.Add(DateTime.UtcNow);
+                            log.Write(LogLevel.Trace, $"Socket {Id} sent {data.Length} bytes");
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // cancelled
+                            break;
+                        }
+                        catch (IOException ioe)
+                        {
+                            // Connection closed unexpectedly, .NET framework                      
+                            Handle(errorHandlers, ioe);
+                            await CloseInternalAsync(false, true).ConfigureAwait(false);
+                            break;
+                        }
+                        catch (WebSocketException wse)
+                        {
+                            // Connection closed unexpectedly                        
+                            Handle(errorHandlers, wse);
+                            await CloseInternalAsync(false, true).ConfigureAwait(false);
+                            break;
+                        }
                     }
                 }
+            }
+            catch (Exception e)
+            {
+                // Because this is running in a separate task and not awaited until the socket gets closed
+                // any exception here will crash the send processing, but do so silently unless the socket get's stopped.
+                // Make sure we at least let the owner know there was an error
+                Handle(errorHandlers, e);
+                throw;
             }
         }
 
@@ -403,82 +455,113 @@ namespace CryptoExchange.Net.Sockets
         {
             _startedReceive = true;
 
-            var buffer = new ArraySegment<byte>(new byte[4096]);
+            var buffer = new ArraySegment<byte>(new byte[65536]);
             var received = 0;
-            while (true)
+            try
             {
-                if (_closing)
-                    break;
-
-                MemoryStream? memoryStream = null;
-                WebSocketReceiveResult? receiveResult = null;
-                bool multiPartMessage = false;
                 while (true)
                 {
-                    try
-                    {
-                        receiveResult = await _socket.ReceiveAsync(buffer, _ctsSource.Token).ConfigureAwait(false);
-                        received += receiveResult.Count;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // cancelled
+                    if (_closing)
                         break;
-                    }
-                    catch (WebSocketException wse)
-                    {
-                        // Connection closed unexpectedly        
-                        Handle(errorHandlers, wse);
-                        await CloseInternalAsync(true, false).ConfigureAwait(false);
-                        break;
-                    }
 
-                    if (receiveResult.MessageType == WebSocketMessageType.Close)
+                    MemoryStream? memoryStream = null;
+                    WebSocketReceiveResult? receiveResult = null;
+                    bool multiPartMessage = false;
+                    while (true)
                     {
-                        // Connection closed unexpectedly        
-                        log.Write(LogLevel.Debug, $"Socket {Id} received `Close` message");
-                        await CloseInternalAsync(true, false).ConfigureAwait(false);
-                        break;
-                    }
+                        try
+                        {
+                            receiveResult = await _socket.ReceiveAsync(buffer, _ctsSource.Token).ConfigureAwait(false);
+                            received += receiveResult.Count;
+                            lock (_receivedMessagesLock)
+                                _receivedMessages.Add(new ReceiveItem(DateTime.UtcNow, receiveResult.Count));
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // cancelled
+                            break;
+                        }
+                        catch (WebSocketException wse)
+                        {
+                            // Connection closed unexpectedly        
+                            Handle(errorHandlers, wse);
+                            await CloseInternalAsync(true, false).ConfigureAwait(false);
+                            break;
+                        }
+                        catch (IOException ioe)
+                        {
+                            // Connection closed unexpectedly, .NET framework
+                            Handle(errorHandlers, ioe);
+                            await CloseInternalAsync(true, false).ConfigureAwait(false);
+                            break;
+                        }
 
-                    if (!receiveResult.EndOfMessage)
-                    {
-                        // We received data, but it is not complete, write it to a memory stream for reassembling
-                        multiPartMessage = true;
-                        if (memoryStream == null)
-                            memoryStream = new MemoryStream();
-                        await memoryStream.WriteAsync(buffer.Array, buffer.Offset, receiveResult.Count).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        if (!multiPartMessage)
-                            // Received a complete message and it's not multi part
-                            HandleMessage(buffer.Array, buffer.Offset, receiveResult.Count, receiveResult.MessageType);
+                        if (receiveResult.MessageType == WebSocketMessageType.Close)
+                        {
+                            // Connection closed unexpectedly        
+                            log.Write(LogLevel.Debug, $"Socket {Id} received `Close` message");
+                            await CloseInternalAsync(true, false).ConfigureAwait(false);
+                            break;
+                        }
+
+                        if (!receiveResult.EndOfMessage)
+                        {
+                            // We received data, but it is not complete, write it to a memory stream for reassembling
+                            multiPartMessage = true;
+                            if (memoryStream == null)
+                                memoryStream = new MemoryStream();
+                            log.Write(LogLevel.Trace, $"Socket {Id} received {receiveResult.Count} bytes in partial message");
+                            await memoryStream.WriteAsync(buffer.Array, buffer.Offset, receiveResult.Count).ConfigureAwait(false);
+                        }
                         else
-                            // Received the end of a multipart message, write to memory stream for reassembling
-                            await memoryStream!.WriteAsync(buffer.Array, buffer.Offset, receiveResult.Count).ConfigureAwait(false);
+                        {
+                            if (!multiPartMessage)
+                            {
+                                // Received a complete message and it's not multi part
+                                log.Write(LogLevel.Trace, $"Socket {Id} received {receiveResult.Count} bytes in single message");
+                                HandleMessage(buffer.Array, buffer.Offset, receiveResult.Count, receiveResult.MessageType);
+                            }
+                            else
+                            {
+                                // Received the end of a multipart message, write to memory stream for reassembling
+                                log.Write(LogLevel.Trace, $"Socket {Id} received {receiveResult.Count} bytes in partial message");
+                                await memoryStream!.WriteAsync(buffer.Array, buffer.Offset, receiveResult.Count).ConfigureAwait(false);
+                            }
+                            break;
+                        }
+                    }
+
+                    lock (_receivedMessagesLock)
+                        UpdateReceivedMessages();
+
+                    if (receiveResult?.MessageType == WebSocketMessageType.Close)
+                    {
+                        // Received close message
                         break;
                     }
-                }
 
-                if (receiveResult?.MessageType == WebSocketMessageType.Close)
-                {
-                    // Received close message
-                    break;
-                }
+                    if (receiveResult == null || _closing)
+                    {
+                        // Error during receiving or cancellation requested, stop.
+                        break;
+                    }
 
-                if (receiveResult == null || _closing)
-                {
-                    // Error during receiving or cancellation requested, stop.
-                    break;
+                    if (multiPartMessage)
+                    {
+                        // Reassemble complete message from memory stream
+                        log.Write(LogLevel.Trace, $"Socket {Id} reassembled message of {memoryStream!.Length} bytes");
+                        HandleMessage(memoryStream!.ToArray(), 0, (int)memoryStream.Length, receiveResult.MessageType);
+                        memoryStream.Dispose();
+                    }
                 }
-
-                if (multiPartMessage)
-                {
-                    // Reassemble complete message from memory stream
-                    HandleMessage(memoryStream!.ToArray(), 0, (int)memoryStream.Length, receiveResult.MessageType);
-                    memoryStream.Dispose();
-                }
+            }
+            catch(Exception e)
+            {
+                // Because this is running in a separate task and not awaited until the socket gets closed
+                // any exception here will crash the receive processing, but do so silently unless the socket get's stopped.
+                // Make sure we at least let the owner know there was an error
+                Handle(errorHandlers, e);
+                throw;
             }
         }
 
@@ -499,7 +582,9 @@ namespace CryptoExchange.Net.Sockets
 
                 try
                 {
-                    strData = DataInterpreterBytes(data);
+                    var relevantData = new byte[count];
+                    Array.Copy(data, offset, relevantData, 0, count);
+                    strData = DataInterpreterBytes(relevantData);
                 }
                 catch(Exception e)
                 {
@@ -541,26 +626,37 @@ namespace CryptoExchange.Net.Sockets
         protected async Task CheckTimeoutAsync()
         {
             log.Write(LogLevel.Debug, $"Socket {Id} Starting task checking for no data received for {Timeout}");
-            while (true)
-            {
-                if (_closing)
-                    return;
+            try 
+            { 
+                while (true)
+                {
+                    if (_closing)
+                        return;
 
-                if (DateTime.UtcNow - LastActionTime > Timeout)
-                {
-                    log.Write(LogLevel.Warning, $"Socket {Id} No data received for {Timeout}, reconnecting socket");
-                    _ = CloseAsync().ConfigureAwait(false);
-                    return;
+                    if (DateTime.UtcNow - LastActionTime > Timeout)
+                    {
+                        log.Write(LogLevel.Warning, $"Socket {Id} No data received for {Timeout}, reconnecting socket");
+                        _ = CloseAsync().ConfigureAwait(false);
+                        return;
+                    }
+                    try
+                    {
+                        await Task.Delay(500, _ctsSource.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // cancelled
+                        break;
+                    }
                 }
-                try
-                {
-                    await Task.Delay(500, _ctsSource.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    // cancelled
-                    break;
-                }
+            }
+            catch (Exception e)
+            {
+                // Because this is running in a separate task and not awaited until the socket gets closed
+                // any exception here will stop the timeout checking, but do so silently unless the socket get's stopped.
+                // Make sure we at least let the owner know there was an error
+                Handle(errorHandlers, e);
+                throw;
             }
         }
 
@@ -604,8 +700,50 @@ namespace CryptoExchange.Net.Sockets
         private int MessagesSentLastSecond()
         {
             var testTime = DateTime.UtcNow;
-            outgoingMessages.RemoveAll(r => testTime - r > TimeSpan.FromSeconds(1));
-            return outgoingMessages.Count;            
+            _outgoingMessages.RemoveAll(r => testTime - r > TimeSpan.FromSeconds(1));
+            return _outgoingMessages.Count;            
+        }
+
+        /// <summary>
+        /// Update the received messages list, removing messages received longer than 3s ago
+        /// </summary>
+        protected void UpdateReceivedMessages()
+        {
+            var checkTime = DateTime.UtcNow;
+            if (checkTime - _lastReceivedMessagesUpdate > TimeSpan.FromSeconds(1))
+            {
+                foreach (var msg in _receivedMessages.ToList()) // To list here because we're removing from the list
+                    if (checkTime - msg.Timestamp > TimeSpan.FromSeconds(3))
+                        _receivedMessages.Remove(msg);
+
+                _lastReceivedMessagesUpdate = checkTime;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Received message info
+    /// </summary>
+    public struct ReceiveItem
+    {
+        /// <summary>
+        /// Timestamp of the received data
+        /// </summary>
+        public DateTime Timestamp { get; set; }
+        /// <summary>
+        /// Number of bytes received
+        /// </summary>
+        public int Bytes { get; set; }
+
+        /// <summary>
+        /// ctor
+        /// </summary>
+        /// <param name="timestamp"></param>
+        /// <param name="bytes"></param>
+        public ReceiveItem(DateTime timestamp, int bytes)
+        {
+            Timestamp = timestamp;
+            Bytes = bytes;
         }
     }
 }
