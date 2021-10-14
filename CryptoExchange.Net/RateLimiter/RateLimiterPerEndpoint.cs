@@ -49,7 +49,7 @@ namespace CryptoExchange.Net.RateLimiter
             lock (rlo.LockObject)
             {
                 sw.Stop();
-                waitTime = rlo.GetWaitTime(DateTime.UtcNow, limitPerEndpoint, perTimePeriod);
+                waitTime = rlo.GetWaitTime(MyDateTime.PreciseDateTime.NowUTC, limitPerEndpoint, perTimePeriod);
                 if (waitTime != 0)
                 {
                     if(limitingBehaviour == RateLimitingBehaviour.Fail)
@@ -59,7 +59,7 @@ namespace CryptoExchange.Net.RateLimiter
                     waitTime += (int)sw.ElapsedMilliseconds;
                 }
 
-                rlo.Add(DateTime.UtcNow);
+                rlo.Add(MyDateTime.PreciseDateTime.NowUTC);
             }
 
             return new CallResult<double>(waitTime, null);

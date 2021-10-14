@@ -38,7 +38,7 @@ namespace CryptoExchange.Net.RateLimiter
             {
                 sw.Stop();
                 double waitTime = 0;
-                var checkTime = DateTime.UtcNow;
+                var checkTime = MyDateTime.PreciseDateTime.NowUTC;
                 history.RemoveAll(d => d < checkTime - perTimePeriod);
 
                 if (history.Count >= limit)
@@ -54,7 +54,7 @@ namespace CryptoExchange.Net.RateLimiter
                     }
                 }
 
-                history.Add(DateTime.UtcNow);
+                history.Add(MyDateTime.PreciseDateTime.NowUTC);
                 history.Sort();
                 return new CallResult<double>(waitTime, null);
             }

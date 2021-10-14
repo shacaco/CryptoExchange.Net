@@ -401,18 +401,18 @@ namespace CryptoExchange.Net.Sockets
                             while (MessagesSentLastSecond() >= RatelimitPerSecond)
                             {
                                 if (start == null)
-                                    start = DateTime.UtcNow;
+                                    start = MyDateTime.PreciseDateTime.NowUTC;
                                 await Task.Delay(10).ConfigureAwait(false);
                             }
 
                             if (start != null)
-                                log.Write(LogLevel.Trace, $"Socket {Id} sent delayed {Math.Round((DateTime.UtcNow - start.Value).TotalMilliseconds)}ms because of rate limit");
+                                log.Write(LogLevel.Trace, $"Socket {Id} sent delayed {Math.Round((MyDateTime.PreciseDateTime.NowUTC - start.Value).TotalMilliseconds)}ms because of rate limit");
                         }
 
                         try
                         {
                             await _socket.SendAsync(new ArraySegment<byte>(data, 0, data.Length), WebSocketMessageType.Text, true, _ctsSource.Token).ConfigureAwait(false);
-                            _outgoingMessages.Add(DateTime.UtcNow);
+                            _outgoingMessages.Add(MyDateTime.PreciseDateTime.NowUTC);
                             log.Write(LogLevel.Trace, $"Socket {Id} sent {data.Length} bytes");
                         }
                         catch (OperationCanceledException)
@@ -474,7 +474,7 @@ namespace CryptoExchange.Net.Sockets
                             receiveResult = await _socket.ReceiveAsync(buffer, _ctsSource.Token).ConfigureAwait(false);
                             received += receiveResult.Count;
                             lock (_receivedMessagesLock)
-                                _receivedMessages.Add(new ReceiveItem(DateTime.UtcNow, receiveResult.Count));
+                                _receivedMessages.Add(new ReceiveItem(MyDateTime.PreciseDateTime.NowUTC, receiveResult.Count));
                         }
                         catch (OperationCanceledException)
                         {
@@ -633,7 +633,7 @@ namespace CryptoExchange.Net.Sockets
                     if (_closing)
                         return;
 
-                    if (DateTime.UtcNow - LastActionTime > Timeout)
+                    if (MyDateTime.PreciseDateTime.NowUTC - LastActionTime > Timeout)
                     {
                         log.Write(LogLevel.Warning, $"Socket {Id} No data received for {Timeout}, reconnecting socket");
                         _ = CloseAsync().ConfigureAwait(false);
@@ -666,7 +666,7 @@ namespace CryptoExchange.Net.Sockets
         /// <param name="handlers"></param>
         protected void Handle(List<Action> handlers)
         {
-            LastActionTime = DateTime.UtcNow;
+            LastActionTime = MyDateTime.PreciseDateTime.NowUTC;
             foreach (var handle in new List<Action>(handlers))
                 handle?.Invoke();
         }
@@ -679,7 +679,7 @@ namespace CryptoExchange.Net.Sockets
         /// <param name="data"></param>
         protected void Handle<T>(List<Action<T>> handlers, T data)
         {
-            LastActionTime = DateTime.UtcNow;
+            LastActionTime = MyDateTime.PreciseDateTime.NowUTC;
             foreach (var handle in new List<Action<T>>(handlers))
                 handle?.Invoke(data);
         }
@@ -699,7 +699,7 @@ namespace CryptoExchange.Net.Sockets
 
         private int MessagesSentLastSecond()
         {
-            var testTime = DateTime.UtcNow;
+            var testTime = MyDateTime.PreciseDateTime.NowUTC;
             _outgoingMessages.RemoveAll(r => testTime - r > TimeSpan.FromSeconds(1));
             return _outgoingMessages.Count;            
         }
@@ -709,7 +709,7 @@ namespace CryptoExchange.Net.Sockets
         /// </summary>
         protected void UpdateReceivedMessages()
         {
-            var checkTime = DateTime.UtcNow;
+            var checkTime = MyDateTime.PreciseDateTime.NowUTC;
             if (checkTime - _lastReceivedMessagesUpdate > TimeSpan.FromSeconds(1))
             {
                 foreach (var msg in _receivedMessages.ToList()) // To list here because we're removing from the list

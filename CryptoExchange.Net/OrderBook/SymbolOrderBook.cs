@@ -416,7 +416,7 @@ namespace CryptoExchange.Net.OrderBook
                 AskCount = asks.Count;
                 BidCount = bids.Count;
 
-                LastOrderBookUpdate = DateTime.UtcNow;
+                LastOrderBookUpdate = MyDateTime.PreciseDateTime.NowUTC;
                 log.Write(LogLevel.Debug, $"{Id} order book {Symbol} data set: {BidCount} bids, {AskCount} asks. #{item.EndUpdateId}");
                 CheckProcessBuffer();
                 OnOrderBookUpdate?.Invoke((item.Bids, item.Asks));
@@ -645,7 +645,7 @@ namespace CryptoExchange.Net.OrderBook
                 return false;
             }
 
-            LastOrderBookUpdate = DateTime.UtcNow;
+            LastOrderBookUpdate = MyDateTime.PreciseDateTime.NowUTC;
             var listToChange = type == OrderBookEntryType.Ask ? asks : bids;
             if (entry.Quantity == 0)
             {
@@ -680,10 +680,10 @@ namespace CryptoExchange.Net.OrderBook
         /// <returns></returns>
         protected async Task<CallResult<bool>> WaitForSetOrderBookAsync(int timeout)
         {
-            var startWait = DateTime.UtcNow;
+            var startWait = MyDateTime.PreciseDateTime.NowUTC;
             while (!bookSet && Status == OrderBookStatus.Syncing)
             {
-                if ((DateTime.UtcNow - startWait).TotalMilliseconds > timeout)
+                if ((MyDateTime.PreciseDateTime.NowUTC - startWait).TotalMilliseconds > timeout)
                     return new CallResult<bool>(false, new ServerError("Timeout while waiting for data"));
 
                 await Task.Delay(10).ConfigureAwait(false);

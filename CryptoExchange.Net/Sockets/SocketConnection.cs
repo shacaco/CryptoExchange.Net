@@ -141,7 +141,7 @@ namespace CryptoExchange.Net.Sockets
         /// <param name="data"></param>
         private void ProcessMessage(string data)
         {
-            var timestamp = DateTime.UtcNow;
+            var timestamp = MyDateTime.PreciseDateTime.NowUTC;
             log.Write(LogLevel.Trace, $"Socket {Socket.Id} received data: " + data);
             if (string.IsNullOrEmpty(data)) return;
 
@@ -252,7 +252,7 @@ namespace CryptoExchange.Net.Sockets
                     log.Write(LogLevel.Warning, $"Socket {Socket.Id} message processing slow ({sw.ElapsedMilliseconds}ms), consider offloading data handling to another thread. " +
                                                     "Data from this socket may arrive late or not at all if message processing is continuously slow.");
                 else
-                    log.Write(LogLevel.Trace, $"Socket {Socket.Id} message processed in {sw.ElapsedMilliseconds}ms");
+                    log.Write(LogLevel.Trace, $"Socket {Socket.Id} message processed in {sw.Elapsed.TotalMilliseconds}ms");
                 return handled;
             }
             catch (Exception ex)
@@ -337,7 +337,7 @@ namespace CryptoExchange.Net.Sockets
 
                 Socket.Reconnecting = true;
 
-                DisconnectTime = DateTime.UtcNow;
+                DisconnectTime = MyDateTime.PreciseDateTime.NowUTC;
                 log.Write(LogLevel.Information, $"Socket {Socket.Id} Connection lost, will try to reconnect after {socketClient.ReconnectInterval}");
                 if (!lostTriggered)
                 {
@@ -385,7 +385,7 @@ namespace CryptoExchange.Net.Sockets
                         var time = DisconnectTime;
                         DisconnectTime = null;
 
-                        log.Write(LogLevel.Information, $"Socket {Socket.Id} reconnected after {DateTime.UtcNow - time}");
+                        log.Write(LogLevel.Information, $"Socket {Socket.Id} reconnected after {MyDateTime.PreciseDateTime.NowUTC - time}");
 
                         var reconnectResult = await ProcessReconnectAsync().ConfigureAwait(false);
                         if (!reconnectResult)
@@ -410,7 +410,7 @@ namespace CryptoExchange.Net.Sockets
                             if (Socket.IsOpen)                            
                                 await Socket.CloseAsync().ConfigureAwait(false);                            
                             else
-                                DisconnectTime = DateTime.UtcNow;
+                                DisconnectTime = MyDateTime.PreciseDateTime.NowUTC;
                         }
                         else
                         {
@@ -445,7 +445,7 @@ namespace CryptoExchange.Net.Sockets
 
         private async void InvokeConnectionRestored(DateTime? disconnectTime)
         {
-            await Task.Run(() => ConnectionRestored?.Invoke(disconnectTime.HasValue ? DateTime.UtcNow - disconnectTime.Value : TimeSpan.FromSeconds(0))).ConfigureAwait(false);
+            await Task.Run(() => ConnectionRestored?.Invoke(disconnectTime.HasValue ? MyDateTime.PreciseDateTime.NowUTC - disconnectTime.Value : TimeSpan.FromSeconds(0))).ConfigureAwait(false);
         }
 
         private async Task<bool> ProcessReconnectAsync()
