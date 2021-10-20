@@ -105,6 +105,10 @@ namespace CryptoExchange.Net.OrderBook
         /// </summary>
         public event Action<(IEnumerable<ISymbolOrderBookEntry> Bids, IEnumerable<ISymbolOrderBookEntry> Asks)>? OnOrderBookUpdate;
         /// <summary>
+        /// Event when order book update is recieved, containing the changed bids and asks. Be careful! It can generate a lot of events at high-liquidity markets 
+        /// </summary>
+        public event Action<(IEnumerable<ISymbolOrderBookEntry> Bids, IEnumerable<ISymbolOrderBookEntry> Asks)>? OnRawOrderBookUpdate;
+        /// <summary>
         /// Timestamp of the last update
         /// </summary>
         public DateTime LastOrderBookUpdate { get; private set; }
@@ -520,6 +524,7 @@ namespace CryptoExchange.Net.OrderBook
         /// <param name="bidList">List of bids</param>
         protected void SetInitialOrderBook(long orderBookSequenceNumber, IEnumerable<ISymbolOrderBookEntry> bidList, IEnumerable<ISymbolOrderBookEntry> askList)
         {
+            OnRawOrderBookUpdate?.Invoke((bidList, askList));
             _processQueue.Enqueue(new InitialOrderBookItem { StartUpdateId = orderBookSequenceNumber, EndUpdateId = orderBookSequenceNumber, Asks = askList, Bids = bidList });
             _queueEvent.Set();
         }
@@ -532,6 +537,7 @@ namespace CryptoExchange.Net.OrderBook
         /// <param name="asks"></param>
         protected void UpdateOrderBook(long rangeUpdateId, IEnumerable<ISymbolOrderBookEntry> bids, IEnumerable<ISymbolOrderBookEntry> asks)
         {
+            OnRawOrderBookUpdate?.Invoke((bids, asks));
             _processQueue.Enqueue(new ProcessQueueItem { StartUpdateId = rangeUpdateId, EndUpdateId = rangeUpdateId, Asks = asks, Bids = bids });
             _queueEvent.Set();
         }
@@ -555,6 +561,7 @@ namespace CryptoExchange.Net.OrderBook
         /// <param name="asks"></param>
         protected void UpdateOrderBook(long firstUpdateId, long lastUpdateId, IEnumerable<ISymbolOrderBookEntry> bids, IEnumerable<ISymbolOrderBookEntry> asks)
         {
+            OnRawOrderBookUpdate?.Invoke((bids, asks));
             _processQueue.Enqueue(new ProcessQueueItem { StartUpdateId = firstUpdateId, EndUpdateId = lastUpdateId, Asks = asks, Bids = bids });
             _queueEvent.Set();
         }
@@ -566,6 +573,7 @@ namespace CryptoExchange.Net.OrderBook
         /// <param name="asks">List of asks</param>
         protected void UpdateOrderBook(IEnumerable<ISymbolOrderSequencedBookEntry> bids, IEnumerable<ISymbolOrderSequencedBookEntry> asks)
         {
+            OnRawOrderBookUpdate?.Invoke((bids, asks));
             var highest = Math.Max(bids.Any() ? bids.Max(b => b.Sequence) : 0, asks.Any() ? asks.Max(a => a.Sequence) : 0);
             var lowest = Math.Min(bids.Any() ? bids.Min(b => b.Sequence) : long.MaxValue, asks.Any() ? asks.Min(a => a.Sequence) : long.MaxValue);
 
