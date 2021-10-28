@@ -59,17 +59,17 @@ namespace CryptoExchange.Net.Interfaces
         /// <summary>
         /// Get a snapshot of the book at this moment
         /// </summary>
-        (IEnumerable<ISymbolOrderBookEntry> bids, IEnumerable<ISymbolOrderBookEntry> asks) Book { get; }
+        (ISymbolOrderBookEntry[] bids, ISymbolOrderBookEntry[] asks) Book { get; }
 
         /// <summary>
         /// The list of asks
         /// </summary>
-        IEnumerable<ISymbolOrderBookEntry> Asks { get; }
+        ISymbolOrderBookEntry[] Asks { get; }
 
         /// <summary>
         /// The list of bids
         /// </summary>
-        IEnumerable<ISymbolOrderBookEntry> Bids { get; }
+        ISymbolOrderBookEntry[] Bids { get; }
 
         /// <summary>
         /// The best bid currently in the order book

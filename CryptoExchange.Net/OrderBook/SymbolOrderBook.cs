@@ -125,31 +125,31 @@ namespace CryptoExchange.Net.OrderBook
         /// <summary>
         /// The list of asks
         /// </summary>
-        public IEnumerable<ISymbolOrderBookEntry> Asks
+        public ISymbolOrderBookEntry[] Asks
         {
             get
             {
                 lock (bookLock)
-                    return asks.Select(a => a.Value).ToList();
+                    return asks.Select(a => a.Value).ToArray();
             }
         }
 
         /// <summary>
         /// The list of bids
         /// </summary>
-        public IEnumerable<ISymbolOrderBookEntry> Bids 
+        public ISymbolOrderBookEntry[] Bids 
         {
             get
             {
                 lock (bookLock)
-                    return bids.Select(a => a.Value).ToList();
+                    return bids.Select(a => a.Value).ToArray();
             }
         }
 
         /// <summary>
         /// Get a snapshot of the book at this moment
         /// </summary>
-        public (IEnumerable<ISymbolOrderBookEntry> bids, IEnumerable<ISymbolOrderBookEntry> asks) Book
+        public (ISymbolOrderBookEntry[] bids, ISymbolOrderBookEntry[] asks) Book
         {
             get
             {
