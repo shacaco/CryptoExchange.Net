@@ -66,7 +66,7 @@ namespace CryptoExchange.Net.OrderBook
         /// <summary>
         /// The status of the order book. Order book is up to date when the status is `Synced`
         /// </summary>
-        public OrderBookStatus Status 
+        public OrderBookStatus Status
         {
             get => status;
             set
@@ -103,7 +103,7 @@ namespace CryptoExchange.Net.OrderBook
         /// <summary>
         /// Event when order book was updated, containing the changed bids and asks. Be careful! It can generate a lot of events at high-liquidity markets 
         /// </summary>
-        public event Action<(IEnumerable<ISymbolOrderBookEntry> Bids, IEnumerable<ISymbolOrderBookEntry> Asks)>? OnOrderBookUpdate;
+        public event Action? OnOrderBookUpdate;
         /// <summary>
         /// Event when order book update is recieved, containing the changed bids and asks. Be careful! It can generate a lot of events at high-liquidity markets 
         /// </summary>
@@ -137,7 +137,7 @@ namespace CryptoExchange.Net.OrderBook
         /// <summary>
         /// The list of bids
         /// </summary>
-        public ISymbolOrderBookEntry[] Bids 
+        public ISymbolOrderBookEntry[] Bids
         {
             get
             {
@@ -181,7 +181,7 @@ namespace CryptoExchange.Net.OrderBook
         /// <summary>
         /// The best ask currently in the order book
         /// </summary>
-        public ISymbolOrderBookEntry BestAsk 
+        public ISymbolOrderBookEntry BestAsk
         {
             get
             {
@@ -193,10 +193,12 @@ namespace CryptoExchange.Net.OrderBook
         /// <summary>
         /// BestBid/BesAsk returned as a pair
         /// </summary>
-        public (ISymbolOrderBookEntry Bid, ISymbolOrderBookEntry Ask) BestOffers {
-            get {
+        public (ISymbolOrderBookEntry Bid, ISymbolOrderBookEntry Ask) BestOffers
+        {
+            get
+            {
                 lock (bookLock)
-                    return (BestBid,BestAsk);
+                    return (BestBid, BestAsk);
             }
         }
 
@@ -236,7 +238,7 @@ namespace CryptoExchange.Net.OrderBook
         /// Start connecting and synchronizing the order book
         /// </summary>
         /// <returns></returns>
-        public async Task<CallResult<bool>> StartAsync()
+        public async Task<CallResult<UpdateSubscription>> StartAsync()
         {
             if (Status != OrderBookStatus.Disconnected)
                 throw new InvalidOperationException($"Can't start book unless state is {OrderBookStatus.Connecting}. Was {Status}");
@@ -249,7 +251,7 @@ namespace CryptoExchange.Net.OrderBook
             if (!startResult)
             {
                 Status = OrderBookStatus.Disconnected;
-                return new CallResult<bool>(false, startResult.Error);
+                return startResult;
             }
 
             subscription = startResult.Data;
@@ -268,7 +270,7 @@ namespace CryptoExchange.Net.OrderBook
 
             subscription.ConnectionRestored += async time => await ResyncAsync().ConfigureAwait(false);
             Status = OrderBookStatus.Synced;
-            return new CallResult<bool>(true, null);
+            return startResult;
         }
 
         /// <summary>
@@ -289,7 +291,7 @@ namespace CryptoExchange.Net.OrderBook
             lock (bookLock)
             {
                 var list = type == OrderBookEntryType.Ask ? asks : bids;
-                
+
                 var step = 0;
                 while (amountLeft > 0)
                 {
@@ -344,10 +346,10 @@ namespace CryptoExchange.Net.OrderBook
             log.Write(LogLevel.Debug, $"{Id} order book {Symbol} stopping");
             Status = OrderBookStatus.Disconnected;
             _queueEvent.Set();
-            if(_processTask != null)
+            if (_processTask != null)
                 await _processTask.ConfigureAwait(false);
 
-            if(subscription != null)
+            if (subscription != null)
                 await subscription.CloseAsync().ConfigureAwait(false);
             log.Write(LogLevel.Debug, $"{Id} order book {Symbol} stopped");
         }
@@ -378,7 +380,7 @@ namespace CryptoExchange.Net.OrderBook
 
         private void ProcessQueue()
         {
-            while(Status != OrderBookStatus.Disconnected)
+            while (Status != OrderBookStatus.Disconnected)
             {
                 _queueEvent.WaitOne();
 
@@ -422,14 +424,16 @@ namespace CryptoExchange.Net.OrderBook
 
                 LastOrderBookUpdate = MyDateTime.PreciseDateTime.NowUTC;
                 log.Write(LogLevel.Debug, $"{Id} order book {Symbol} data set: {BidCount} bids, {AskCount} asks. #{item.EndUpdateId}");
-                CheckProcessBuffer();
-                OnOrderBookUpdate?.Invoke((item.Bids, item.Asks));
-                OnBestOffersChanged?.Invoke((BestBid, BestAsk));
+                CheckProcessBuffer();               
             }
+            OnOrderBookUpdate?.Invoke();
+            OnBestOffersChanged?.Invoke((BestBid, BestAsk));
         }
 
         private void ProcessQueueItem(ProcessQueueItem item)
         {
+            bool bestOffersChanged = false;
+            (ISymbolOrderBookEntry prevBestBid, ISymbolOrderBookEntry prevBestAsk) bestOffers = default((ISymbolOrderBookEntry prevBestBid, ISymbolOrderBookEntry prevBestAsk));
             lock (bookLock)
             {
                 if (!bookSet)
@@ -442,11 +446,13 @@ namespace CryptoExchange.Net.OrderBook
                         LastUpdateId = item.EndUpdateId,
                     });
                     log.Write(LogLevel.Debug, $"{Id} order book {Symbol} update buffered #{item.StartUpdateId}-#{item.EndUpdateId} [{item.Asks.Count()} asks, {item.Bids.Count()} bids]");
+                    return;
                 }
                 else
                 {
                     CheckProcessBuffer();
-                    var (prevBestBid, prevBestAsk) = BestOffers;
+                    bestOffers = BestOffers;
+                    bestOffersChanged = CheckBestOffersChanged(bestOffers.prevBestBid, bestOffers.prevBestAsk);
                     ProcessRangeUpdates(item.StartUpdateId, item.EndUpdateId, item.Bids, item.Asks);
 
                     if (!asks.Any() || !bids.Any())
@@ -458,12 +464,12 @@ namespace CryptoExchange.Net.OrderBook
                         _stopProcessing = true;
                         Resubscribe();
                         return;
-                    }                    
-
-                    OnOrderBookUpdate?.Invoke((item.Bids, item.Asks));
-                    CheckBestOffersChanged(prevBestBid, prevBestAsk);
+                    }
                 }
             }
+            OnOrderBookUpdate?.Invoke();
+            if (bestOffersChanged)
+                OnBestOffersChanged?.Invoke((bestOffers.prevBestBid, bestOffers.prevBestAsk));
         }
 
         private void ProcessChecksum(ChecksumItem ci)
@@ -472,7 +478,7 @@ namespace CryptoExchange.Net.OrderBook
             {
                 if (!validateChecksum)
                     return;
-                                
+
                 bool checksumResult = false;
                 try
                 {
@@ -486,7 +492,7 @@ namespace CryptoExchange.Net.OrderBook
                         throw;
                 }
 
-                if(!checksumResult)
+                if (!checksumResult)
                 {
                     log.Write(LogLevel.Warning, $"{Id} order book {Symbol} out of sync. Resyncing");
                     _stopProcessing = true;
@@ -577,7 +583,7 @@ namespace CryptoExchange.Net.OrderBook
             var highest = Math.Max(bids.Any() ? bids.Max(b => b.Sequence) : 0, asks.Any() ? asks.Max(a => a.Sequence) : 0);
             var lowest = Math.Min(bids.Any() ? bids.Min(b => b.Sequence) : long.MaxValue, asks.Any() ? asks.Min(a => a.Sequence) : long.MaxValue);
 
-            _processQueue.Enqueue(new ProcessQueueItem { StartUpdateId = lowest, EndUpdateId = highest , Asks = asks, Bids = bids });
+            _processQueue.Enqueue(new ProcessQueueItem { StartUpdateId = lowest, EndUpdateId = highest, Asks = asks, Bids = bids });
             _queueEvent.Set();
         }
 
@@ -620,7 +626,7 @@ namespace CryptoExchange.Net.OrderBook
         protected void CheckProcessBuffer()
         {
             var pbList = processBuffer.ToList();
-            if(pbList.Count > 0)
+            if (pbList.Count > 0)
                 log.Write(LogLevel.Debug, "Processing buffered updates");
 
             foreach (var bufferEntry in pbList)
@@ -700,12 +706,13 @@ namespace CryptoExchange.Net.OrderBook
             return new CallResult<bool>(true, null);
         }
 
-        private void CheckBestOffersChanged(ISymbolOrderBookEntry prevBestBid, ISymbolOrderBookEntry prevBestAsk)
+        private bool CheckBestOffersChanged(ISymbolOrderBookEntry prevBestBid, ISymbolOrderBookEntry prevBestAsk)
         {
             var (bestBid, bestAsk) = BestOffers;
             if (bestBid.Price != prevBestBid.Price || bestBid.Quantity != prevBestBid.Quantity ||
                    bestAsk.Price != prevBestAsk.Price || bestAsk.Quantity != prevBestAsk.Quantity)
-                OnBestOffersChanged?.Invoke((bestBid, bestAsk));
+                return true;
+            return false;
         }
 
         /// <summary>

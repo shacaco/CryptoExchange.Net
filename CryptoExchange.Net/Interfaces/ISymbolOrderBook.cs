@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using CryptoExchange.Net.Objects;
+using CryptoExchange.Net.Sockets;
 
 namespace CryptoExchange.Net.Interfaces
 {
@@ -31,7 +32,7 @@ namespace CryptoExchange.Net.Interfaces
         /// <summary>
         /// Event when order book was updated. Be careful! It can generate a lot of events at high-liquidity markets
         /// </summary>    
-        event Action<(IEnumerable<ISymbolOrderBookEntry> Bids, IEnumerable<ISymbolOrderBookEntry> Asks)> OnOrderBookUpdate;
+        event Action OnOrderBookUpdate;
         /// <summary>
         /// Event when order book update is recieved. Be careful! It can generate a lot of events at high-liquidity markets
         /// </summary> 
@@ -90,7 +91,7 @@ namespace CryptoExchange.Net.Interfaces
         /// Start connecting and synchronizing the order book
         /// </summary>
         /// <returns></returns>
-        Task<CallResult<bool>> StartAsync();
+        Task<CallResult<UpdateSubscription>> StartAsync();
 
         /// <summary>
         /// Stop syncing the order book
