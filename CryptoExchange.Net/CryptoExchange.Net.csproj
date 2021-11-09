@@ -50,7 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="MyDateTime">
-      <HintPath>..\..\MyDateTime\MyDateTime\MyDateTime\bin\Release\netstandard2.0\MyDateTime.dll</HintPath>
+      <HintPath>..\..\Utilities\Utilities\MyDateTime\bin\Release\netstandard2.0\MyDateTime.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>
